@@ -1,11 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
-
-
-#!/usr/bin/env python
-# coding: utf-8
 import os
 import sys
 import re
@@ -26,8 +21,30 @@ import pynndescent
 import networkx
 import tifffile
 import shapely
+#import rolling_ball
+
 ray.shutdown()
 
+'''def subtract_background(image, radius=50, light_bg=False):
+        from skimage.morphology import white_tophat, black_tophat, disk
+        str_el = disk(radius)
+        if light_bg:
+            return(black_tophat(image, str_el))
+        else:
+            return(white_tophat(image, str_el))
+'''
+
+def RollingBallIJ(infile,imagejpath='~/utils/Fiji.app/ImageJ-linux64',scriptpath='~/code/macaque-dev-brain/imaging/SubtractBackground.js'):
+        import sys
+        import subprocess
+        from subprocess import PIPE, STDOUT
+        cmd=[os.path.expanduser(imagejpath),os.path.expanduser(scriptpath),os.path.expanduser(infile)]
+        cmd=' '.join(cmd)
+        print(cmd,flush=True)
+        process = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stdin=subprocess.PIPE, stderr=subprocess.STDOUT)
+        (stdoutdata, stderrdata) = process.communicate()
+        print(stdoutdata)      
+        
 #stitchchannel should be a string ['0','1','2','3']
 #chosenstitchgroup corresponds to tissue slide position via MTS slide naming conventions (when in doubt choose 1)
 #x lims correspond to proportion of image to stitch, defaults to stitching entire image
@@ -35,7 +52,7 @@ ray.shutdown()
 #save stitched saves the full stitched image for each channel (at constant size to downsample image)
 #Constant size approx 300 MB for 16bit stitched at constant_size=200000000
 #use_gene_name requires MTS directory structuring and a channel to gene table
-def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-.05,x2lim=1.05,y1lim=-.05,y2lim=1.05,save_stitched=True,save_multipage=True,constant_size=200000000,use_gene_name=True,save_merged=False):
+def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-.05,x2lim=1.05,y1lim=-.05,y2lim=1.05,save_stitched=True,save_multipage=True,constant_size=250000000,roll_ball=True,use_gene_name=True,save_merged=False):
     #dirname = os.path.expanduser('/wynton/group/ye/mtschmitz/images/MacaqueMotorCortex2/P2sagittal1_27_20200828/TR1.2020-09-03-01-35-13/')
     #Test params
     '''dirname = os.path.expanduser('/media/mt/Extreme SSD/MacaqueMotorCortex2/P2_OB_20200805/TR1.2020-08-06-23-10-18')
@@ -165,12 +182,12 @@ def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-
 
     imageFiles['ActualPositionX']=imageFiles['ActualPositionX'].astype(float)
     imageFiles['ActualPositionY']=imageFiles['ActualPositionY'].astype(float)
-    print(imageFiles['ActualPositionX'])
-    print(imageFiles['ActualPositionY'])
+    #print(imageFiles['ActualPositionX'])
+    #print(imageFiles['ActualPositionY'])
     imageFiles['SizeX']=imageFiles['SizeX'].astype(float)
     imageFiles['SizeY']=imageFiles['SizeY'].astype(float)
     imageFiles.sort_values(by=['"field" Index','Channel Name'],inplace=True)
-
+    print(imageFiles,flush=True)
     #Max size
     chif=imageFiles#.loc[imageFiles['Channel Name']==stitchchannel,:]
     chif['x1pix']=0
@@ -213,6 +230,7 @@ def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-
     matplotlib.pyplot.scatter([x[0] for x in shapes[chosenstitchgroup]], [x[1] for x in shapes[chosenstitchgroup]])
     matplotlib.pyplot.scatter(buffgon.exterior.coords.xy[0],buffgon.exterior.coords.xy[1])
     matplotlib.pyplot.savefig(os.path.join(dirout,'BufferPolygon.png'))
+    matplotlib.pyplot.close()
     chif=chif.loc[inside,:]
 
     #normalize positions so starts at 0,0
@@ -236,24 +254,17 @@ def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-
         chif.loc[i,'y2pix']=y2
 
 
-    # In[2]:
-
-
     cf=chif.loc[chif['TheC']==stitchchannel,:]
     cf['Image']=None
     for i in tqdm.tqdm(cf.index):
         img=cv2.imread(cf.loc[i,'Path'])[:,:,0].T
         cf.loc[i,'Image']=[img]
-
+    print(chif,flush=True)
     #print(cf.loc[2,'Image'].shape)
     #plt.imshow(cf.loc[2,'Image'],origin='lower')
 
-
-
     index=pynndescent.NNDescent(cf.loc[:,['x1pix','y1pix']],n_neighbors=9)
     nn=index.query(cf.loc[:,['x1pix','y1pix']],k=9)[0][:,1:]
-
-
 
     g=networkx.DiGraph().to_undirected()
     for i,x in enumerate(nn):
@@ -411,25 +422,25 @@ def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-
     chif['y1pix']=chif['y1pix']-ymin
     chif['y2pix']=chif['y2pix']-ymin
 
-    def write_stitchy(chdf,infile):    
+    def write_stitchy(chdf,infile,keyname='FileName'):    
         with open(infile, 'w') as the_file:
             the_file.write('dim = 2\n')
             for i in chdf.index:
                 cur=chdf.loc[i,:]
-                the_file.write(cur['Path']+'; ; ('+ str(cur['x1pix'])+','+str(cur['y1pix'])+') \n')
+                the_file.write(cur[keyname]+'; ; ('+ str(cur['x1pix'])+','+str(cur['y1pix'])+') \n')
 
     #for imagej merge on the fly
     for c in chif['final_identifier'].unique():
         cf=chif.loc[chif['final_identifier']==c,:]
         infile=os.path.join(dirout,str(chosenstitchgroup)+'_'+stitchchannel+'.stitchy')
-        write_stitchy(cf,infile)
+        write_stitchy(cf,infile,keyname='FileName')
 
     #Or write whole file         
     if save_stitched:
         for c in chif['final_identifier'].unique():
             cf=chif.loc[chif['final_identifier']==c,:]
             cf['Image']=None
-            for i in tqdm.tqdm(cf.index):
+            for i in cf.index:
                 img=cv2.imread(cf.loc[i,'Path'])[:,:,0].T
                 cf.loc[i,'Image']=[img]
             newimg=np.zeros((int(cf['x2pix'].max()),int(cf['y2pix'].max())), np.uint8)
@@ -438,7 +449,7 @@ def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-
                 x1,x2,y1,y2=cf.loc[i,['x1pix','x2pix','y1pix','y2pix']]
                 newimg[x1:x2,y1:y2]+=cf.loc[i,'Image']
                 divisor[x1:x2,y1:y2]+=1
-            im=np.nan_to_num(np.divide(newimg,divisor).T,nan=0).astype(np.uint16)
+            im=np.nan_to_num(np.divide(newimg,divisor).T,nan=0).astype(np.uint8)
             cur_size=im.shape[0]*im.shape[1]
             if constant_size<cur_size:
                 scale_percent = np.sqrt(constant_size/cur_size)  # percent of original size
@@ -448,7 +459,17 @@ def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-
                 # resize image
                 im = cv2.resize(im, dim, interpolation = cv2.INTER_AREA) 
             #from PIL import Image
+            print('background subbing',flush=True)
+            #import skimage
+            #from skimage import morphology
+            #im=im-skimage.morphology.rolling_ball(im,radius=100)
+            #subtract_background(im,radius=100,light_bg=False)
+            im=im.astype(np.uint16)
             tifffile.imsave(os.path.join(dirout,c+'_stitched.TIF'),im,compress=6)
+            if roll_ball:
+                RollingBallIJ(os.path.join(dirout,c+'_stitched.TIF'))
+            print('background subbed',flush=True)
+
     '''
     if save_merged:
         imgs={}
@@ -471,6 +492,7 @@ def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-
     if save_multipage:
         l=[]
         for f in tqdm.tqdm(cf['"field" Index'].unique()):
+            print(f,flush=True)
             cf=chif.loc[chif['"field" Index']==f,:]
             cf=cf.sort_values(by='final_identifier',axis=0)
             cf['Image']=None
@@ -486,6 +508,6 @@ def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-
             tifffile.imsave(os.path.join(dirout,f+'_merged.TIF'),list(imgs.values()),
                             metadata=metadata,
                             compress=6)
-            l.append([os.path.join(dirout,f+'_merged.TIF'),cf.loc[i,'x1pix'],cf.loc[i,'y1pix']])
+            l.append([f+'_merged.TIF',cf.loc[i,'x1pix'],cf.loc[i,'y1pix']])
         infile=os.path.join(dirout,'_'.join(list(imgs.keys()))+'_merged.stitchy')
-        write_stitchy(pd.DataFrame(l,columns=['Path','x1pix','y1pix']),infile)
+        write_stitchy(pd.DataFrame(l,columns=['FileName','x1pix','y1pix']),infile,keyname='FileName')

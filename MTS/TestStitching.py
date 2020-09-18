@@ -11,6 +11,7 @@ import sys
 sys.path.insert(1, os.path.expanduser('~/code/macaque-dev-brain/imaging/'))
 import ImageStitching
 import random
+random.seed()
 
 # In[2]:
 
@@ -40,13 +41,16 @@ for f in dirlist:
             i+=1
             if numunstitched>10:
                 print(dirname)
-                #if not os.path.exists(os.path.join(dirname,str(i))):
-                #    os.mkdir(os.path.join(dirname,str(i)))
-                #ImageStitching.CorrelateStitchImages(dirname,os.path.join(dirname,str(i)),'1',str(i))
+                #df,IF=ImageStitching.ImageJStitchImages(dirname,dirname,'DAPI',str(i),-0.01,1.01,-0.01,1.01)   
                 try:
-                    if not os.path.exists(os.path.join(dirname,str(i))):
-                        os.mkdir(os.path.join(dirname,str(i)))
-                    ImageStitching.CorrelateStitchImages(dirname,os.path.join(dirname,str(i)),'1',str(i))
+                    random.seed()
+                    mm=[0.01,.1,2,20]
+                    random.shuffle(mm)
+                    ad=[.02,.2,4,30]
+                    random.shuffle(ad)
+                    for minmax in ad:
+                        for absdisp in mm:
+                    	    df,IF=ImageStitching.ImageJStitchImages(dirname,dirname,'DAPI',str(i),-0.05,1.05,-0.05,1.05,minmax,absdisp)
                 except Exception as e:
                     print(e)
                     print('fail')
