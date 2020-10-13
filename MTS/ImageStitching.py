@@ -21,6 +21,7 @@ import pynndescent
 import networkx
 import tifffile
 import shapely
+import traceback
 #import rolling_ball
 
 ray.shutdown()
@@ -243,7 +244,6 @@ def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-
     for i in chif.index:
         x=chif.loc[i,'ActualPositionX']/xmedian#xorder[chif.loc[i,'ActualPositionX']]
         y=chif.loc[i,'ActualPositionY']/ymedian#yorder[chif.loc[i,'ActualPositionY']]
-        print(x,y)
         x1=int((xsize*x)-(x*minoverlap))
         x2=x1+int(xsize)
         y1=int((ysize*y)-(y*minoverlap))
@@ -355,8 +355,8 @@ def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-
         #print(corr)
         return(corr)
 
-    #opt=scipy.optimize.brute(correlateOffsets,(slice(30,400),slice(30,400)),full_output=True,disp=False,workers=num_cpus)
-    opt=scipy.optimize.minimize(correlateOffsets,(minoverlap*2,minoverlap*2),method='Nelder-Mead',options={'xtol':.9,'ftol':.05})
+    #opt=scipy.optimize.brute(correlateOffsets,(slice(30,500),slice(30,500)),full_output=True,disp=False,workers=num_cpus)
+    opt=scipy.optimize.minimize(correlateOffsets,(minoverlap*2.5,minoverlap*2.5),method='Nelder-Mead',options={'xtol':.9,'ftol':.05})
 
 
     chif['final_identifier']=chif['TheC']
@@ -413,7 +413,8 @@ def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-
         chif.loc[i,'x2pix']=x2
         chif.loc[i,'y1pix']=y1
         chif.loc[i,'y2pix']=y2
-
+    print('before min subtract')    
+    print(chif)
     xmin=chif['x1pix'].min()
     ymin=chif['y1pix'].min()
 
@@ -434,7 +435,8 @@ def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-
         cf=chif.loc[chif['final_identifier']==c,:]
         infile=os.path.join(dirout,str(chosenstitchgroup)+'_'+stitchchannel+'.stitchy')
         write_stitchy(cf,infile,keyname='FileName')
-
+    
+    print(chif)
     #Or write whole file         
     if save_stitched:
         for c in chif['final_identifier'].unique():
@@ -443,8 +445,8 @@ def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-
             for i in cf.index:
                 img=cv2.imread(cf.loc[i,'Path'])[:,:,0].T
                 cf.loc[i,'Image']=[img]
-            newimg=np.zeros((int(cf['x2pix'].max()),int(cf['y2pix'].max())), np.uint8)
-            divisor=np.zeros((int(cf['x2pix'].max()),int(cf['y2pix'].max())), np.uint8)
+            newimg=np.zeros((int(np.nanmax(cf['x2pix'])),int(np.nanmax(cf['y2pix']))), np.uint8)
+            divisor=np.zeros((int(np.nanmax(cf['x2pix'])),int(np.nanmax(cf['y2pix']))), np.uint8)
             for i in cf.index:
                 x1,x2,y1,y2=cf.loc[i,['x1pix','x2pix','y1pix','y2pix']]
                 newimg[x1:x2,y1:y2]+=cf.loc[i,'Image']
@@ -457,7 +459,7 @@ def CorrelateStitchImages(dirname,dirout,stitchchannel,chosenstitchgroup,x1lim=-
                 height = int(im.shape[0] * scale_percent)
                 dim = (width, height)
                 # resize image
-                im = cv2.resize(im, dim, interpolation = cv2.INTER_AREA) 
+                im = cv2.resize(im, dim, interpolation = cv2.INTER_LINEAR) 
             #from PIL import Image
             print('background subbing',flush=True)
             #import skimage

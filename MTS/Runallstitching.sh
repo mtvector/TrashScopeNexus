@@ -4,8 +4,8 @@
 #$ -cwd
 #$ -j y
 #$ -pe smp 1
-#$ -l mem_free=96G
-#$ -l h_rt=72:00:00
+#$ -l mem_free=206G
+#$ -l h_rt=96:00:00
 
 source ~/.bashrc
 source activate imaging

@@ -11,7 +11,7 @@ import sys
 sys.path.insert(1, os.path.expanduser('~/code/macaque-dev-brain/imaging/'))
 import ImageStitching
 import random
-
+import traceback
 # In[2]:
 
 
@@ -49,5 +49,6 @@ for f in dirlist:
                     ImageStitching.CorrelateStitchImages(dirname,os.path.join(dirname,str(i)),'1',str(i))
                 except Exception as e:
                     print(e)
+                    traceback.print_exc()
                     print('fail')
 
